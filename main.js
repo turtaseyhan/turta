@@ -1,6 +1,11 @@
 const { Intents, Client, MessageEmbed, Collection } = require("discord.js");
 const Discord = require("discord.js");
-const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v9');
+const { Handler } = require('discord-slash-command-handler')
+const client = new Client( {
+  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES],
+});
 const mongoose = require("mongoose");
 const fs = require("fs");
 const { ProfilingLevel } = require("mongodb");
@@ -9,22 +14,14 @@ client.login(settings.loginToken);
 client.config = require("./req/configDiscord.json");
 const getip = require("./essentials/getIP.js");
 const mongo = require("./mongodb/mongo.js");
+const os = require("os");
+
 
 const superagent = require("superagent");
 
-async function getIP() {
-  const ip = await superagent
-    .get("https://api.ipify.org?format=json")
-    .then((res) => res.body.ip);
-  return ip;
-};
-
-/** 
-   * @param {string} type
-   */
-getIP(type) {
-  return this.IpAdress({ type });
-};
+// Functions for the bot
+const getIP = require("./essentials/getIP.js");
+const state_schema = require("./mongodb/schemas/state_schema.js");
 
 client.on("ready", async () => {
   console.log("State");
@@ -40,22 +37,36 @@ client.on("ready", async () => {
       { name: "Node.js", value: process.version, inline: true },
       { name: "MongoDB", value: mongoose.version, inline: true },
       { name: "Nodemon", value: "v1.8.3", inline: true },
-      { name: "Ip Adress", value: await getIP() }
+      { name: "OS", value: os.version(), inline: true },
+      { name: "Ip Adress", value: await getIP('ipv4') || await getIP('ipv6') },
+      { name: "CPU", value: `${os.cpus()[0].model} ${os.arch()}`, inline: true}
     );
   console.log(
-    client.channels.cache.get("778745188482154506").send({ embeds: [embed] })
+    client.channels.cache.get("778745188482154506").send({ embeds: [embed] }),
   );
-  const state_schema = require("./mongodb/schemas/state_schema.js");
   await mongo().then(async (mongooose) => {
     try {
-      await state_schema({
-        ipv4: `${await getIP()}`,
-        ipv6: null,
-        discordjs_version: Discord.version,
-        nodejs: process.version,
-        mongodb: mongoose.version,
-        timeIstanbul: Date(),
-      }).save();
+          await state_schema.findOneAndUpdate(
+            { _id: "1" },
+            {
+              $set: {
+                ipv4: await getIP('ipv4'),
+                ipv6: await getIP('ipv6'),
+                discordjs_version: Discord.version,
+                nodejs: process.version,
+                mongodb: mongoose.version,
+                cpuArch: os.arch(),
+                cpu: os.cpus()[0].model,
+                os: os.version(),
+                timeIstanbul: Date(),
+              },
+            },  // Update the document
+          );
+          // fetch data from mongo
+          await state_schema.find({}).then(data => {
+              console.log(data[0].ipv4);
+            
+          }).catch(err => console.log('An error succed :', err))
     } catch (err) {
       console.log(err);
     } finally {
@@ -64,5 +75,56 @@ client.on("ready", async () => {
   });
 });
 
-client.commands = new Collection();
-require("./handler")(client);
+client.on('messageCreate', message => {
+  if(message.content == 'p!test') {
+    message.reply('5.5.5.5')
+  }
+})
+
+client.on('ready', () => {
+  const handler = new Handler(client, {
+    commandFolder: '/commands',
+    commandType: 'file' || 'folder',
+    eventFolder: '/events',
+    mongoURI: settings.mongoPath,
+    prefix: settings.prefix,
+  })
+
+  handler.on('slashCommand', (command,command_data) => {
+    // handle the command
+    // command is your normal command object,  for command_data go down below to data types
+})
+})
+
+
+
+
+
+
+
+
+// Command Handler
+const config = require("./req/configDiscord.json");
+
+client.config = config;
+client.commands = new Discord.Collection();
+
+const events = fs
+  .readdirSync("./events")
+  .filter((file) => file.endsWith(".js"));
+for (const file of events) {
+  const eventName = file.split(".")[0];
+  const event = require(`./events/${file}`);
+  client.on(eventName, event.bind(null, client));
+}
+
+const commands = fs
+  .readdirSync("./commands")
+  .filter((file) => file.endsWith(".js"));
+for (const file of commands) {
+  const commandName = file.split(".")[0];
+  const command = require(`./commands/${file}`);
+
+  console.log(`Attempting to load command ${commandName}`);
+  client.commands.set(commandName, command);
+}
