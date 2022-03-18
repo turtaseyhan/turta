@@ -1,7 +1,7 @@
 {
-    "loginToken": "NzUwMDU2ODU3MTkxNTc5NjU4.X00-4g.TSk9Jal7Cvvj1Kags-ARWwFKv94",
+    "loginToken": "",
     "clientID":"750056857191579658",
-    "mongoPath": "mongodb+srv://pie-db:0711byada@cluster0.kyf6p.mongodb.net/applepie?retryWrites=true&w=majority",
+    "mongoPath": "",
     "prefix": "p!",
     "color": "RED",
     "owner": "276239391171674112",
